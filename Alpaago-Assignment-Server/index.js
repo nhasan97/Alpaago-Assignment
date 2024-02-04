@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
@@ -16,6 +16,20 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+
+const verifyToken = (req, res, next) => {
+  const token = req?.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized Access" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ygecibd.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -39,6 +53,50 @@ async function run() {
 
     const database = client.db("userManagement");
 
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+        })
+        .send({ success: true });
+    });
+
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      res.clearCookie("token", { maxAge: 0 }).send({ success: true });
+    });
+
+    app.put("/users/:email", verifyToken, async (req, res) => {
+      try {
+        const usersCollection = database.collection("userInfo");
+        const email = req.params.email;
+        const user = req.body;
+        const query = { email: email };
+        const option = { upsert: true };
+        const doesExist = await usersCollection.findOne(query);
+        if (doesExist) {
+          return res.send(doesExist);
+        }
+        const result = await usersCollection.updateOne(
+          query,
+          {
+            $set: { ...user, timeStamp: Date.now() },
+          },
+          option
+        );
+        return res.send(result);
+      } catch (error) {
+        res.send({ error: true, message: error.message });
+      }
+    });
+
+    // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
