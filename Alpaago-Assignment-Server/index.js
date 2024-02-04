@@ -10,7 +10,11 @@ const port = 5000 || process.env.PORT;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "https://user-manager-6a061.web.app",
+      "https://user-manager-6a061.firebaseapp.com",
+    ],
     credentials: true,
   })
 );
